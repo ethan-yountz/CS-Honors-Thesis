@@ -40,7 +40,9 @@ The bigger goal is to use sports forecasting as a concrete setting for studying 
 
 **RQ2. Within-season stabilization.** As more within-season information comes in, how quickly do predictive performance and reliability settle down?
 
-- Measure each model's error and uncertainty calibration in different phases of the season.
+- Each model is trained only on the season being evaluated, walking forward one game day at a time. Early in the season the models have very little training data on purpose, since that is the regime being studied.
+- Measure each model's error in different phases of the season. Uncertainty calibration is a future task.
+- Design and open decisions: [`docs/rq2_experiment.md`](docs/rq2_experiment.md).
 - Possible extension: look at how **roster continuity** affects how fast predictions stabilize. Two candidate measures are:
   - *Returning minutes share:* the percentage of last season's minutes played by players who are back this season.
   - *Coach change:* whether the head coach changed.
@@ -98,7 +100,7 @@ All of these are known before tip-off. Most would be used as home/away pairs or 
 
 **Done:** 2025–26 (`--season 2026`) is collected end to end. That covers games with box scores and spread, pre-game T-Rank for both teams, preseason rosters, and coaches.
 
-1. **Build current-season form features** (not started). Add a feature-building step that:
+1. **Build current-season form features** (in progress, `python -m src.features --season 2026`). Pre-game T-Rank already supplies opponent-adjusted offensive and defensive efficiency and tempo; this step adds what the T-Rank archive lacks. Season-to-date four factors (offense and defense, unadjusted for opponent) are done; raw efficiencies, margin, games played, and rest days are still stubs. The step:
    - reshapes `games_{season}` into one row per team per game;
    - computes possessions, offensive and defensive efficiency, tempo, four factors, and margin for each game;
    - aggregates each team's games played *before* the game date (season-to-date, possibly with opponent adjustment), and also games played and rest days;
@@ -109,7 +111,9 @@ All of these are known before tip-off. Most would be used as home/away pairs or 
    - re-check `BART_NAME_FIXES` for each season;
    - confirm that the cbbdata archive covers 2015–2025 as expected.
 4. **Write the feature-availability table** in `docs/`. For each feature, list its source, when it becomes available, and its leakage risk.
-5. **Fit baselines, then the model families**, using the chronological evaluation design below.
+5. **Run RQ2 on 2025–26** (skeleton in `src/rq2.py`, figures in `notebooks/rq2_stabilization.ipynb`). Decide the phase cutoffs, implement the T-Rank baseline spread and the model families, then walk forward through the season.
+6. **Fit baselines, then the model families, for RQ1**, using the chronological evaluation design below.
+7. **Future: calibration.** Add prediction intervals on the spread (e.g. conformal) and report interval score and coverage by season phase.
 
 **Open data issues (2025–26):** no coach was found for Nicholls. For Cal State Bakersfield, Torvik's coaching-moves list and ESPN's coach records disagree.
 
@@ -183,7 +187,7 @@ A full feature-availability table will live in `docs/` as a deliverable. It will
 
 ## Evaluation design
 
-- **Chronological splits only.** No random cross-validation. Training, tuning, and testing follow season order (rolling-origin or leave-one-season-out), and hyperparameters are tuned only on *earlier* seasons.
+- **Chronological splits only.** No random cross-validation. For RQ1, training, tuning, and testing follow season order (rolling-origin or leave-one-season-out), and hyperparameters are tuned only on *earlier* seasons. For RQ2, everything stays within one season: models are refit on games before each game day, and any tuning uses only those earlier games.
 - **Season phases.** Results are reported separately for early, middle, and late season (exact cutoffs, such as game counts or dates, still to be decided).
 - **Metrics.** MAE on the spread is the primary metric. Interval score and coverage are planned for prediction intervals.
 - **Shift diagnostics.** Compare seasons by feature distributions, statistical tests, missing data, and a "which season is this from?" classifier.
