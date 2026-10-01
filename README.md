@@ -4,7 +4,7 @@ Senior honors thesis in Computer Science at UNC Chapel Hill (COMP 691H in fall, 
 
 - **Student:** Ethan Yountz
 - **Advisor:** Tianlong Chen
-- **Status:** COMP 691H (fall research semester). The data pipeline is under construction.
+- **Status:** COMP 691H (fall research semester). 2025–26 data collection is in place, and feature construction is next (see [Next steps](#next-steps)).
 
 ---
 
@@ -58,6 +58,60 @@ results/       model comparison tables and figures
 ```
 
 
+
+## Data collection
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m src.collect --season 2026   # 2025-26; add --refresh to re-download
+```
+
+Put `CBD_USER` and `CBD_PW` in `.env` for the T-Rank step; without them it is skipped. cbbdata's ratings archive ends in June 2025 (through the 2024–25 season), so for later seasons the daily ratings are rebuilt from Barttorvik's own daily snapshots (`barttorvik.com/timemachine/team_results/YYYYMMDD_team_results.json.gz`), which match cbbdata's rows exactly on overlapping dates. Raw pulls are cached in `data/raw/`, and the outputs go to `data/processed/`:
+
+| File | Contents |
+| ---- | -------- |
+| `teams_{season}` | Division I teams (the ones T-Rank rates): ESPN id, Barttorvik name, conference |
+| `games_{season}` | One row per completed game: home/away teams, neutral site, scores, `spread`, both teams' box scores, and each team's latest T-Rank snapshot dated before game day |
+| `preseason_rosters_{season}` | Each D1 team's roster as listed in its first game, with position, height, and class |
+| `coaches_{season}` | Coach(es) with a regular-season record at each D1 team, plus whether the head coach changed in the preceding offseason (from Barttorvik's coaching-moves list) |
+
+### Data structure
+
+`games_{season}` is the central table, with one row per game. Its columns are game context, then `home_*` and `away_*` blocks for team, score, box score, and pre-game T-Rank, plus `spread`. The other tables are keyed by ESPN `team_id` and join onto games through `home_team_id` / `away_team_id`. `teams_{season}` maps ESPN ids to Barttorvik names, so Torvik data can be matched to ESPN games.
+
+The scores and box scores in a game's row are that game's **outcome**. They can never be features for the same game, only inputs to features computed from a team's earlier games.
+
+### Potential features
+
+All of these are known before tip-off. Most would be used as home/away pairs or as home-minus-away differences.
+
+- **Game context:** neutral site, conference game, postseason, date or days into the season, rest days since each team's last game.
+- **Pre-game T-Rank (from Torvik):** barthag, adjusted offensive and defensive efficiency, adjusted tempo, wins above bubble, and rank, all from the snapshot dated the day before the game.
+- **Previous season:** prior year-end T-Rank ratings, which serve as a preseason prior.
+- **Current-season form (derived):** offensive and defensive efficiency (points per 100 possessions), tempo, four factors (eFG%, turnover rate, offensive rebound rate, free-throw rate), scoring margin, and games played. These use only the games completed before the game date, either raw or adjusted for opponent strength.
+- **Roster:** roster size, class mix (share of freshmen and seniors), average height, and returning minutes share. Returning minutes share needs last season's player minutes, for example from Torvik's player-season data.
+- **Coaching:** offseason coach change, and a coach change during the season.
+
+**Efficiency features not taken from Torvik need to be derived** from the team box scores in `games_{season}`. Possessions are typically estimated as FGA − offensive rebounds + turnovers + 0.475 × FTA. Each derived feature must be computed only from games played before the game being predicted.
+
+## Next steps
+
+**Done:** 2025–26 (`--season 2026`) is collected end to end. That covers games with box scores and spread, pre-game T-Rank for both teams, preseason rosters, and coaches.
+
+1. **Build current-season form features** (not started). Add a feature-building step that:
+   - reshapes `games_{season}` into one row per team per game;
+   - computes possessions, offensive and defensive efficiency, tempo, four factors, and margin for each game;
+   - aggregates each team's games played *before* the game date (season-to-date, possibly with opponent adjustment), and also games played and rest days;
+   - joins the results back onto each game as `home_*` / `away_*` features.
+2. **Add previous-season and roster features.** These are the prior year-end T-Rank ratings, returning minutes share (last season's player minutes, likely from Torvik player-season data), and roster composition from `preseason_rosters_{season}`.
+3. **Backfill earlier seasons (2015–2025).** Run `src.collect` for each season. Three things to resolve:
+   - sportsdataverse's ESPN rosters, game rosters, and team crosswalk only go back to 2025, so earlier seasons need another roster source and team-name mapping;
+   - re-check `BART_NAME_FIXES` for each season;
+   - confirm that the cbbdata archive covers 2015–2025 as expected.
+4. **Write the feature-availability table** in `docs/`. For each feature, list its source, when it becomes available, and its leakage risk.
+5. **Fit baselines, then the model families**, using the chronological evaluation design below.
+
+**Open data issues (2025–26):** no coach was found for Nicholls. For Cal State Bakersfield, Torvik's coaching-moves list and ESPN's coach records disagree.
 
 ## Data sources and APIs
 

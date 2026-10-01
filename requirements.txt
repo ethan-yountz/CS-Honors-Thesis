@@ -1,0 +1,11 @@
+sportsdataverse==0.1.4
+# sportsdataverse imports xgboost at load time. xgboost>=2.1 macOS wheels no longer
+# bundle libomp (they need `brew install libomp`); 2.0.3 still ships it.
+xgboost==2.0.3
+pandas
+polars
+pyarrow
+requests
+certifi
+python-dotenv
+lxml
